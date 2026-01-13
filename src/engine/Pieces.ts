@@ -27,6 +27,18 @@ export const SHAPES: Record<string, Shape> = {
         [1, 1, 0],
         [0, 1, 1],
     ],
+    ONE: [[1]],
+    TWO: [[1, 1]],
+    THREE: [[1, 1, 1]],
+    RECT2x3: [
+        [1, 1, 1],
+        [1, 1, 1],
+    ],
+    NINE: [
+        [1, 1, 1],
+        [1, 1, 1],
+        [1, 1, 1],
+    ],
 };
 
 export const COLORS: Record<string, string> = {
@@ -37,4 +49,9 @@ export const COLORS: Record<string, string> = {
     S: '#00ff00', // Green
     T: '#cc00ff', // Purple
     Z: '#ff0000', // Red
+    ONE: '#ff9999',
+    TWO: '#99ff99',
+    THREE: '#9999ff',
+    RECT2x3: '#ffff99',
+    NINE: '#ff99ff',
 };

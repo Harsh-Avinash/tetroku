@@ -6,9 +6,13 @@ export class Game {
     renderer: Renderer;
     GRID_SIZE: number;
     grid: number[][];
+    gridAges: number[][];
     hand: Shape[];
+    bag: string[];
     inputHandler: InputHandler;
     score: number;
+    turnCount: number;
+    roundCount: number;
     gameOver: boolean;
     timerInterval: number | undefined;
     isProcessing: boolean;
@@ -17,12 +21,16 @@ export class Game {
 
     constructor(renderer: Renderer) {
         this.renderer = renderer;
-        this.GRID_SIZE = 9;
+        this.GRID_SIZE = 7;
         this.grid = Array(this.GRID_SIZE).fill(null).map(() => Array(this.GRID_SIZE).fill(0));
+        this.gridAges = Array(this.GRID_SIZE).fill(null).map(() => Array(this.GRID_SIZE).fill(0));
         this.score = 0;
+        this.turnCount = 0;
+        this.roundCount = 1;
         this.gameOver = false;
         this.isProcessing = false;
         this.hand = [];
+        this.bag = [];
         this.startTime = Date.now();
         this.elapsedTime = 0;
 
@@ -35,6 +43,8 @@ export class Game {
     start() {
         console.log('Game started');
         this.score = 0;
+        this.turnCount = 0;
+        this.roundCount = 0; // refillHand will make it 1
         this.gameOver = false;
         this.isProcessing = false;
         this.startTime = Date.now();
@@ -51,6 +61,16 @@ export class Game {
                 this.renderer.updateTime(this.elapsedTime);
             }
         }, 1000) as unknown as number;
+    }
+
+    refillHand() {
+        this.roundCount++;
+        this.renderer.updateRounds(this.roundCount);
+
+        this.hand = [];
+        for (let i = 0; i < 3; i++) {
+            this.hand.push(this.getRandomPiece());
+        }
     }
 
     restart() {
@@ -70,7 +90,6 @@ export class Game {
         return newShape;
     }
 
-    bag: string[] = [];
 
     refillBag() {
         const keys = Object.keys(SHAPES);
@@ -100,13 +119,6 @@ export class Game {
             shape = this.rotateShape(shape);
         }
         return shape;
-    }
-
-    refillHand() {
-        this.hand = [];
-        for (let i = 0; i < 3; i++) {
-            this.hand.push(this.getRandomPiece());
-        }
     }
 
     validatePlacement(gridX: number, gridY: number, shape: Shape): boolean {
@@ -147,8 +159,8 @@ export class Game {
             for (let c = 0; c < cols; c++) {
                 if (shape[r][c] === 1) {
                     this.grid[gridY + r][gridX + c] = 1;
-                    // Mark Age
-                    this.gridAges[gridY + r][gridX + c] = this.turnCount;
+                    // Mark Age using Round Count
+                    this.gridAges[gridY + r][gridX + c] = this.roundCount;
                 }
             }
         }
@@ -156,7 +168,7 @@ export class Game {
         this.hand.splice(shapeIndex, 1);
 
         this.renderer.updateGrid(this); // Pass full state for ages
-        this.renderer.updateRounds(this.turnCount);
+        // Round updates handled in refillHand or render
         this.renderer.updateHand(this);
 
         await this.checkClears();
@@ -164,6 +176,7 @@ export class Game {
         if (this.hand.length === 0) {
             this.refillHand();
             this.renderer.updateHand(this);
+            this.renderer.updateGrid(this); // Immediate visual update for new round colors
         }
 
         if (this.checkGameOver()) {
@@ -220,18 +233,19 @@ export class Game {
                 if (clearedCells.has(key)) return;
                 clearedCells.add(key);
 
-                const placeTurn = this.gridAges[y][x];
-                const age = this.turnCount - placeTurn;
+                const placeRound = this.gridAges[y][x];
+                const age = this.roundCount - placeRound;
 
                 // Scoring System:
-                // Green (0-1): 0
-                // Yellow (2-4): 20
-                // Orange (5-7): 30
-                // Red (8+): 50
+                // Green (0-2): 0
+                // Light Yellow (3-4): 0
+                // Yellow (5-7): 20
+                // Orange (8-9): 30
+                // Red (10+): 50
                 let tilePoints = 0;
-                if (age >= 8) tilePoints = 50;
-                else if (age >= 5) tilePoints = 30;
-                else if (age >= 2) tilePoints = 20;
+                if (age >= 10) tilePoints = 50;
+                else if (age >= 8) tilePoints = 30;
+                else if (age >= 5) tilePoints = 20;
                 else tilePoints = 0;
 
                 points += tilePoints;
@@ -298,21 +312,53 @@ export class Game {
         const shape = this.hand[shapeIndex];
         if (!shape) return;
 
-        const isValid = this.validatePlacement(gridX, gridY, shape);
+        const isValid = this.validatePlacement(gridX, gridY, shape); // This already checks bounds
 
         const affected: { x: number, y: number }[] = [];
         const rows = shape.length;
         const cols = shape[0].length;
 
+        const rowsToCheck = new Map<number, number>();
+        const colsToCheck = new Map<number, number>();
+
         for (let r = 0; r < rows; r++) {
             for (let c = 0; c < cols; c++) {
                 if (shape[r][c] === 1) {
-                    affected.push({ x: gridX + c, y: gridY + r });
+                    const absX = gridX + c;
+                    const absY = gridY + r;
+                    affected.push({ x: absX, y: absY });
+
+                    rowsToCheck.set(absY, (rowsToCheck.get(absY) || 0) + 1);
+                    colsToCheck.set(absX, (colsToCheck.get(absX) || 0) + 1);
                 }
             }
         }
 
-        this.renderer.updatePreview(affected, isValid);
+        const clearingRows: number[] = [];
+        const clearingCols: number[] = [];
+
+        if (isValid) {
+            rowsToCheck.forEach((addedCount, y) => {
+                // Check if valid row index first (validatePlacement handles it for the shape, but let's be safe)
+                if (y >= 0 && y < this.GRID_SIZE) {
+                    let existing = 0;
+                    for (let x = 0; x < this.GRID_SIZE; x++) if (this.grid[y][x] !== 0) existing++;
+                    // Since isValid is true, we know the new blocks fall on empty spots (0).
+                    // So total filled will be existing + addedCount.
+                    if (existing + addedCount === this.GRID_SIZE) clearingRows.push(y);
+                }
+            });
+
+            colsToCheck.forEach((addedCount, x) => {
+                if (x >= 0 && x < this.GRID_SIZE) {
+                    let existing = 0;
+                    for (let y = 0; y < this.GRID_SIZE; y++) if (this.grid[y][x] !== 0) existing++;
+                    if (existing + addedCount === this.GRID_SIZE) clearingCols.push(x);
+                }
+            });
+        }
+
+        this.renderer.updatePreview(affected, isValid, clearingRows, clearingCols);
     }
 
     clearPreview() {

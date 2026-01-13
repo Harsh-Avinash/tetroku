@@ -1,6 +1,7 @@
 export class Renderer {
     container: HTMLElement;
     scoreElement: HTMLElement | null = null;
+    roundElement: HTMLElement | null = null;
     timeElement: HTMLElement | null = null;
     gridContainer: HTMLElement | null = null;
     handContainer: HTMLElement | null = null;
@@ -27,26 +28,38 @@ export class Renderer {
         wrapper.className = 'game-wrapper';
         this.container.appendChild(wrapper);
 
-        // Stats Bar (Unified)
-        const statsBar = document.createElement('div');
-        statsBar.className = 'stats-bar glass-panel';
+        // Stats Container (Islands)
+        const statsContainer = document.createElement('div');
+        statsContainer.className = 'stats-container';
 
+        // 1. Score Island
+        const scorePanel = document.createElement('div');
+        scorePanel.className = 'stats-island glass-panel';
         this.scoreElement = document.createElement('div');
         this.scoreElement.className = 'score-board';
         this.scoreElement.innerText = `Score: ${gameState.score || 0}`;
-        statsBar.appendChild(this.scoreElement);
+        scorePanel.appendChild(this.scoreElement);
+        statsContainer.appendChild(scorePanel);
 
+        // 2. Round Island
+        const roundPanel = document.createElement('div');
+        roundPanel.className = 'stats-island glass-panel';
         this.roundElement = document.createElement('div');
         this.roundElement.className = 'round-board';
-        this.roundElement.innerText = `Round: ${gameState.turnCount || 0}`;
-        statsBar.appendChild(this.roundElement);
+        this.roundElement.innerText = `Round: ${gameState.roundCount || 1}`;
+        roundPanel.appendChild(this.roundElement);
+        statsContainer.appendChild(roundPanel);
 
+        // 3. Time Island
+        const timePanel = document.createElement('div');
+        timePanel.className = 'stats-island glass-panel';
         this.timeElement = document.createElement('div');
         this.timeElement.className = 'time-board';
         this.timeElement.innerText = `0:00`;
-        statsBar.appendChild(this.timeElement);
+        timePanel.appendChild(this.timeElement);
+        statsContainer.appendChild(timePanel);
 
-        wrapper.appendChild(statsBar);
+        wrapper.appendChild(statsContainer);
 
         this.gridContainer = document.createElement('div');
         this.gridContainer.className = 'grid-container glass-panel';
@@ -88,7 +101,7 @@ export class Renderer {
         this.updateGrid(gameState);
         this.updateHand(gameState);
         this.updateScore(gameState.score || 0);
-        this.updateRounds(gameState.turnCount || 0);
+        this.updateRounds(gameState.roundCount || 0);
         this.updateTime(gameState.elapsedTime || 0);
 
         if (!gameState.gameOver) {
@@ -110,7 +123,7 @@ export class Renderer {
         const cells = this.gridContainer.children;
         const grid = gameState.grid;
         const gridAges = gameState.gridAges;
-        const currentTurn = gameState.turnCount;
+        const currentRound = gameState.roundCount;
         const size = grid.length;
 
         for (let y = 0; y < size; y++) {
@@ -121,12 +134,13 @@ export class Renderer {
 
                 let ageClass = '';
                 if (val !== 0) {
-                    const placedTurn = gridAges[y][x];
-                    const age = currentTurn - placedTurn;
+                    const placedRound = gridAges[y][x];
+                    const age = currentRound - placedRound;
 
-                    if (age >= 8) ageClass = 'tile-age-red';
-                    else if (age >= 5) ageClass = 'tile-age-orange';
-                    else if (age >= 2) ageClass = 'tile-age-yellow';
+                    if (age >= 10) ageClass = 'tile-age-red';
+                    else if (age >= 8) ageClass = 'tile-age-orange';
+                    else if (age >= 5) ageClass = 'tile-age-yellow';
+                    else if (age >= 3) ageClass = 'tile-age-light-yellow';
                     else ageClass = 'tile-age-green';
                 }
 
@@ -192,7 +206,7 @@ export class Renderer {
         });
     }
 
-    updatePreview(cells: { x: number, y: number }[], isValid: boolean) {
+    updatePreview(cells: { x: number, y: number }[], isValid: boolean, clearingRows: number[] = [], clearingCols: number[] = []) {
         this.clearPreview();
 
         cells.forEach(pos => {
@@ -202,12 +216,24 @@ export class Renderer {
                 cell.classList.add(isValid ? 'valid' : 'invalid');
             }
         });
+
+        if (isValid) {
+            clearingRows.forEach(y => {
+                const rowCells = this.container.querySelectorAll(`.grid-cell[data-y="${y}"]`);
+                rowCells.forEach(cell => cell.classList.add('preview-clear'));
+            });
+
+            clearingCols.forEach(x => {
+                const colCells = this.container.querySelectorAll(`.grid-cell[data-x="${x}"]`);
+                colCells.forEach(cell => cell.classList.add('preview-clear'));
+            });
+        }
     }
 
     clearPreview() {
-        const previews = this.container.querySelectorAll('.grid-cell.preview');
+        const previews = this.container.querySelectorAll('.preview, .preview-clear');
         previews.forEach(el => {
-            el.classList.remove('preview', 'valid', 'invalid');
+            el.classList.remove('preview', 'valid', 'invalid', 'preview-clear');
         });
     }
 
